@@ -1,0 +1,22 @@
+# File sensibili (Non caricare MAI su GitHub)
+.env
+
+# Dati personali degli allenamenti
+csv/
+fit/
+coach_notes.txt
+
+# Ambienti virtuali Python
+.venv/
+venv/
+env/
+
+# Cache e file generati da Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# File temporanei di sistema
+.DS_Store
+Thumbs.db
