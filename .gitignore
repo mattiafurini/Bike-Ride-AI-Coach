@@ -20,3 +20,7 @@ __pycache__/
 # File temporanei di sistema
 .DS_Store
 Thumbs.db
+
+# File di sviluppo locale
+TODO.md
+embeddings.db
