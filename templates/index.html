@@ -22,7 +22,7 @@
                 <p>Select a ride to view your performance data</p>
             </div>
             <div class="action-buttons">
-                <button id="viewNotesBtn" class="btn btn-secondary">📝 View Notes</button>
+                <button id="openChatBtn" class="btn btn-secondary">💬 Coach Chat</button>
                 <button id="settingsBtn" class="btn btn-secondary" style="padding: 0.5rem 1rem; border-radius: 50%;" title="Settings">⚙️</button>
                 <button id="compareBtn" class="btn btn-secondary" style="min-width: 200px;">Compare Rides (VS)</button>
                 <div class="upload-btn-wrapper">
@@ -123,7 +123,6 @@
             <div class="modal-header">
                 <h2>🤖 Coach AI Chat</h2>
                 <div>
-                    <button id="saveNotesBtn" class="btn btn-primary btn-small" style="margin-right: 0.5rem;">💾 Save to Notebook</button>
                     <button id="closeModalBtn" class="btn btn-secondary">Close</button>
                 </div>
             </div>
@@ -154,33 +153,25 @@
             
             <div class="settings-form">
                 <p style="color:var(--text-secondary); margin-bottom: 1rem; line-height: 1.5;">
-                    To use the AI Coach, you must provide your own Google Gemini API Key. 
+                    To use the AI Coach, select your preferred AI provider and enter the corresponding API Key. 
                     This key is stored securely in your browser's local storage and is never saved on our servers.
                 </p>
                 <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="apiKeyInput" style="display:block; margin-bottom: 0.5rem; font-weight: bold;">Gemini API Key</label>
-                    <input type="password" id="apiKeyInput" placeholder="AIzaSy..." style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.8rem; color: white;">
+                    <label for="apiProviderSelect" style="display:block; margin-bottom: 0.5rem; font-weight: bold;">AI Provider</label>
+                    <select id="apiProviderSelect" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.8rem; color: white; margin-bottom: 1rem;">
+                        <option value="github" style="color: black;">GitHub Models (GPT-4o)</option>
+                        <option value="gemini" style="color: black;">Google Gemini</option>
+                    </select>
+                    
+                    <label for="apiKeyInput" style="display:block; margin-bottom: 0.5rem; font-weight: bold;">API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="Enter API Key here..." style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.8rem; color: white;">
                 </div>
-                <button id="saveSettingsBtn" class="btn btn-primary" style="width: 100%;">Save Key</button>
+                <button id="saveSettingsBtn" class="btn btn-primary" style="width: 100%;">Save Settings</button>
                 <p id="settingsFeedback" style="color: #10b981; margin-top: 1rem; font-weight: bold; text-align: center;" class="hidden">Settings Saved!</p>
             </div>
         </div>
     </div>
 
-    <!-- Notes Modal -->
-    <div id="notesModal" class="modal-overlay hidden">
-        <div class="modal-content glass-panel" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>📝 Coach Notebook</h2>
-                <button id="closeNotesBtn" class="btn btn-secondary">Close</button>
-            </div>
-            
-            <div class="notes-content" style="margin-top: 1rem; max-height: 400px; overflow-y: auto;">
-                <div id="notesLoading" class="loading-indicator">Loading notes...</div>
-                <div id="notesText" class="markdown-body" style="color: var(--text-primary); line-height: 1.6;"></div>
-            </div>
-        </div>
-    </div>
 
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

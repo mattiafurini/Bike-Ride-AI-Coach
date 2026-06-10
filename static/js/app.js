@@ -71,15 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('aiModal').classList.add('hidden');
     });
     
+    document.getElementById('openChatBtn').addEventListener('click', openAIChat);
+    
     document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
     document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveApiKey);
-    
-    document.getElementById('viewNotesBtn').addEventListener('click', viewNotes);
-    document.getElementById('closeNotesBtn').addEventListener('click', () => {
-        document.getElementById('notesModal').classList.add('hidden');
-    });
-    document.getElementById('saveNotesBtn').addEventListener('click', saveNotes);
     
     document.getElementById('startAnalysisBtn').addEventListener('click', runAICompare);
     document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
@@ -125,10 +121,30 @@ function addChatBubble(role, content) {
     container.scrollTop = container.scrollHeight;
 }
 
-async function runAICompare() {
-    const apiKey = localStorage.getItem('gemini_api_key');
+function openAIChat() {
+    const apiKey = localStorage.getItem('ai_api_key') || localStorage.getItem('gemini_api_key');
     if(!apiKey) {
-        alert('Please configure your Gemini API Key in Settings first.');
+        alert('Please configure your API Key in Settings first.');
+        return;
+    }
+    document.getElementById('aiModal').classList.remove('hidden');
+    document.getElementById('chatInput').disabled = false;
+    document.getElementById('sendChatBtn').disabled = false;
+    document.getElementById('chatInput').focus();
+    
+    if(chatHistory.length === 0) {
+        document.getElementById('chatHistory').innerHTML = '';
+        const greeting = "Ciao! Sono il tuo AI Cycling Coach. Come posso aiutarti oggi con i tuoi allenamenti?";
+        addChatBubble('ai', greeting);
+        chatHistory.push({role: 'assistant', content: greeting});
+    }
+}
+
+async function runAICompare() {
+    const apiKey = localStorage.getItem('ai_api_key') || localStorage.getItem('gemini_api_key');
+    const apiProvider = localStorage.getItem('ai_provider') || 'github';
+    if(!apiKey) {
+        alert('Please configure your API Key in Settings first.');
         return;
     }
 
@@ -148,7 +164,8 @@ async function runAICompare() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 rides: selectedRidesForCompare,
-                api_key: apiKey
+                api_key: apiKey,
+                provider: apiProvider
             })
         });
         const data = await response.json();
@@ -185,8 +202,12 @@ async function sendChatMessage() {
     addChatBubble('user', text);
     chatHistory.push({role: 'user', content: text});
     
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if(!apiKey) return;
+    const apiKey = localStorage.getItem('ai_api_key') || localStorage.getItem('gemini_api_key');
+    const apiProvider = localStorage.getItem('ai_provider') || 'github';
+    if(!apiKey) {
+        alert('Please configure your API Key in Settings first.');
+        return;
+    }
 
     document.getElementById('aiLoading').classList.remove('hidden');
     
@@ -194,7 +215,7 @@ async function sendChatMessage() {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ history: chatHistory, api_key: apiKey })
+            body: JSON.stringify({ history: chatHistory, api_key: apiKey, provider: apiProvider })
         });
         const data = await response.json();
         
@@ -235,8 +256,10 @@ function formatMonth(folderStr) {
 
 // Settings Logic
 function openSettingsModal() {
-    const key = localStorage.getItem('gemini_api_key') || '';
+    const key = localStorage.getItem('ai_api_key') || localStorage.getItem('gemini_api_key') || '';
+    const provider = localStorage.getItem('ai_provider') || 'github';
     document.getElementById('apiKeyInput').value = key;
+    document.getElementById('apiProviderSelect').value = provider;
     document.getElementById('settingsFeedback').classList.add('hidden');
     document.getElementById('settingsModal').classList.remove('hidden');
 }
@@ -247,10 +270,16 @@ function closeSettingsModal() {
 
 function saveApiKey() {
     const key = document.getElementById('apiKeyInput').value.trim();
+    const provider = document.getElementById('apiProviderSelect').value;
+    
     if(key) {
-        localStorage.setItem('gemini_api_key', key);
-    } else {
+        localStorage.setItem('ai_api_key', key);
+        localStorage.setItem('ai_provider', provider);
+        // Clean up old key if exists
         localStorage.removeItem('gemini_api_key');
+    } else {
+        localStorage.removeItem('ai_api_key');
+        localStorage.removeItem('ai_provider');
     }
     
     document.getElementById('settingsFeedback').classList.remove('hidden');
@@ -259,72 +288,6 @@ function saveApiKey() {
     }, 1000);
 }
 
-// Notes Logic
-async function viewNotes() {
-    document.getElementById('notesModal').classList.remove('hidden');
-    document.getElementById('notesLoading').classList.remove('hidden');
-    document.getElementById('notesText').innerHTML = '';
-    
-    try {
-        const response = await fetch('/api/notes');
-        const data = await response.json();
-        document.getElementById('notesLoading').classList.add('hidden');
-        if (data.notes) {
-            document.getElementById('notesText').innerHTML = marked.parse(data.notes);
-        } else {
-            document.getElementById('notesText').textContent = 'Errore nel caricamento degli appunti.';
-        }
-    } catch(e) {
-        document.getElementById('notesLoading').classList.add('hidden');
-        document.getElementById('notesText').textContent = 'Errore di connessione.';
-    }
-}
-
-async function saveNotes() {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if(!apiKey) {
-        alert('Configura prima la tua API Key nelle impostazioni.');
-        return;
-    }
-    
-    if(chatHistory.length === 0) {
-        alert('Non c\'è ancora nessuna conversazione da riassumere!');
-        return;
-    }
-    
-    const btn = document.getElementById('saveNotesBtn');
-    const originalText = btn.textContent;
-    btn.textContent = '⏳ Salvataggio...';
-    btn.disabled = true;
-    
-    try {
-        const response = await fetch('/api/notes/update', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ history: chatHistory, api_key: apiKey })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            btn.textContent = '✅ Salvato!';
-        } else {
-            alert('Errore: ' + data.error);
-            btn.textContent = originalText;
-            btn.disabled = false;
-        }
-    } catch(e) {
-        alert('Errore di connessione.');
-        btn.textContent = originalText;
-        btn.disabled = false;
-    }
-    
-    setTimeout(() => {
-        if(btn.textContent === '✅ Salvato!') {
-            btn.textContent = originalText;
-            btn.disabled = false;
-        }
-    }, 3000);
-}
 
 async function loadRideList() {
     try {

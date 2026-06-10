@@ -10,11 +10,19 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-def get_client(api_key):
-    return OpenAI(
-        base_url="https://models.inference.ai.azure.com",
-        api_key=api_key,
-    )
+def get_client_config(provider, api_key):
+    if provider == 'gemini':
+        client = OpenAI(
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=api_key
+        )
+        return client, "gemini-3.5-flash", "text-embedding-004"
+    else:
+        client = OpenAI(
+            base_url="https://models.inference.ai.azure.com",
+            api_key=api_key,
+        )
+        return client, "gpt-4o", "text-embedding-3-small"
 
 
 # Configuration
@@ -132,12 +140,12 @@ def get_summary(path):
 - Alta (> 100 rpm, fuorigiri o sprint): {cad_zones['Z4']} min
 """
 
-def ensure_embeddings(api_key):
+def ensure_embeddings(provider, api_key):
     """
     Scans the CSV_FOLDER for files.
     If a file is not in SQLite, generates its summary and embedding, and saves it.
     """
-    client = get_client(api_key)
+    client, _, embed_model = get_client_config(provider, api_key)
     conn = sqlite3.connect(app.config['DB_FILE'])
     cursor = conn.cursor()
     
@@ -159,7 +167,7 @@ def ensure_embeddings(api_key):
             # Fetch embedding from OpenAI (GitHub Models)
             try:
                 result = client.embeddings.create(
-                    model="text-embedding-3-small",
+                    model=embed_model,
                     input=summary
                 )
                 embedding = result.data[0].embedding # List of floats
@@ -177,13 +185,13 @@ def ensure_embeddings(api_key):
     conn.commit()
     conn.close()
 
-def search_similar_rides(query, api_key, top_k=3):
-    client = get_client(api_key)
+def search_similar_rides(query, provider, api_key, top_k=3):
+    client, _, embed_model = get_client_config(provider, api_key)
     
     # Embed query
     try:
         result = client.embeddings.create(
-            model="text-embedding-3-small",
+            model=embed_model,
             input=query
         )
         query_emb = np.array(result.data[0].embedding, dtype=np.float32)
@@ -351,6 +359,7 @@ def compare_rides():
     data = request.json
     rides = data.get('rides', [])
     api_key = data.get('api_key')
+    provider = data.get('provider', 'github')
     
     if not api_key:
         return jsonify({'error': 'API Key mancante. Configurala nelle impostazioni.'}), 401
@@ -358,7 +367,7 @@ def compare_rides():
     if len(rides) < 2:
         return jsonify({'error': 'At least two rides required'}), 400
         
-    client = get_client(api_key)
+    client, chat_model, _ = get_client_config(provider, api_key)
         
     try:
         # Utilizza la funzione get_summary definita globalmente
@@ -382,7 +391,7 @@ def compare_rides():
 {all_summaries}
 """
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=chat_model,
             messages=[
                 {"role": "system", "content": COACH_SYSTEM_INSTRUCTION},
                 {"role": "user", "content": prompt}
@@ -415,6 +424,7 @@ def chat():
     data = request.json
     history = data.get('history', [])
     api_key = data.get('api_key')
+    provider = data.get('provider', 'github')
     
     if not api_key:
         return jsonify({'error': 'API Key mancante. Configurala nelle impostazioni.'}), 401
@@ -422,7 +432,7 @@ def chat():
     if not history:
         return jsonify({'error': 'History required'}), 400
         
-    client = get_client(api_key)
+    client, chat_model, _ = get_client_config(provider, api_key)
         
     try:
         messages = [
@@ -436,25 +446,39 @@ def chat():
                 content = json.dumps({"response": content, "notes": ""})
             messages.append({"role": msg['role'], "content": content})
             
-        ensure_embeddings(api_key)
+        ensure_embeddings(provider, api_key)
         
         last_msg = history[-1]['content']
         
         # Recupera il contesto RAG pertinente rispetto all'ultimo messaggio
-        similar_rides = search_similar_rides(last_msg, api_key, top_k=3)
-        
+        prompt_lower = last_msg.lower()
         rag_context = ""
-        if similar_rides:
-            rag_context = "\n\n**CONTESTO RECUPERATO DAL DATABASE ALLENAMENTI (RAG):**\n"
-            rag_context += "Usa i dati sottostanti se pertinenti per rispondere alla domanda.\n"
-            for score, filename, summary in similar_rides:
-                rag_context += summary + "\n"
+        
+        if "ultim" in prompt_lower or "recent" in prompt_lower:
+            # Ordina per filename (che inizia con YYYY-MM-DD) decrescente
+            conn = sqlite3.connect(app.config['DB_FILE'])
+            cursor = conn.cursor()
+            cursor.execute("SELECT summary FROM rides_embeddings ORDER BY filename DESC LIMIT 3")
+            rows = cursor.fetchall()
+            conn.close()
+            
+            if rows:
+                rag_context = "\n\n**CONTESTO FORNITO (ULTIMI ALLENAMENTI IN ORDINE CRONOLOGICO):**\n"
+                for row in rows:
+                    rag_context += row[0] + "\n"
+        else:
+            similar_rides = search_similar_rides(last_msg, provider, api_key, top_k=3)
+            if similar_rides:
+                rag_context = "\n\n**CONTESTO RECUPERATO DAL DATABASE ALLENAMENTI (RAG):**\n"
+                rag_context += "Usa i dati sottostanti se pertinenti per rispondere alla domanda.\n"
+                for score, filename, summary in similar_rides:
+                    rag_context += summary + "\n"
         
         last_msg_with_context = last_msg + rag_context
         messages.append({"role": "user", "content": last_msg_with_context})
         
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=chat_model,
             messages=messages,
             response_format={ "type": "json_object" }
         )
@@ -491,6 +515,7 @@ def update_notes():
     data = request.json
     history = data.get('history', [])
     api_key = data.get('api_key')
+    provider = data.get('provider', 'github')
     
     if not api_key:
         return jsonify({'error': 'API Key mancante.'}), 401
@@ -498,7 +523,7 @@ def update_notes():
     if not history:
         return jsonify({'error': 'Nessuna cronologia trovata per fare il riassunto.'}), 400
         
-    client = get_client(api_key)
+    client, chat_model, _ = get_client_config(provider, api_key)
     
     existing_notes = ""
     if os.path.exists(app.config['NOTES_FILE']):
@@ -518,7 +543,7 @@ def update_notes():
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=chat_model,
             messages=[
                 {"role": "system", "content": "Sei un Coach di ciclismo. Il tuo unico scopo è prendere la cronologia di chat fornita e restituire un riassunto concentrato degli appunti sull'atleta. Mantieni il tuo ruolo professionale."},
                 {"role": "user", "content": prompt}
